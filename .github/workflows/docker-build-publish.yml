@@ -1,0 +1,47 @@
+
+name: Docker Build & Push to Azure ACR
+
+on:
+  push:
+    branches:
+      - develop
+      - release
+      - main
+
+env:
+  ACR_NAME: policyflowregistry
+  IMAGE_NAME: policyflow-compliance-portal
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set Docker Tag
+        id: set-tag
+        run: |
+          BRANCH=$(echo "${GITHUB_REF##*/}")
+          VERSION=$(date +%Y%m%d%H%M%S)
+          if [ "$BRANCH" == "develop" ]; then
+            echo "DOCKER_TAG=alpha-$VERSION" >> $GITHUB_ENV
+          elif [ "$BRANCH" == "release" ]; then
+            echo "DOCKER_TAG=beta-$VERSION" >> $GITHUB_ENV
+          elif [ "$BRANCH" == "main" ] || [ "$BRANCH" == "master" ]; then
+            echo "DOCKER_TAG=prod-$VERSION" >> $GITHUB_ENV
+          else
+            echo "DOCKER_TAG=dev-$VERSION" >> $GITHUB_ENV
+          fi
+
+      - name: Azure Login to ACR
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ env.ACR_NAME }}.azurecr.io
+          username: ${{ secrets.AZURE_ACR_USERNAME }}
+          password: ${{ secrets.AZURE_ACR_PASSWORD }}
+
+      - name: Build and Push Image
+        run: |
+          docker build -t $ACR_NAME.azurecr.io/$IMAGE_NAME:$DOCKER_TAG .
+          docker push $ACR_NAME.azurecr.io/$IMAGE_NAME:$DOCKER_TAG
